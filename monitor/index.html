@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도와드림 레이더 인원 모니터</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--sub:#5d6678;--line:#e3e6ec;--accent:#2f6fde;--ok:#1f9d55;--warn:#d98a00;--bad:#d64545}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Pretendard","Malgun Gothic",system-ui,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:700}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;background:#eef1f6;font-size:13px;color:var(--sub)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#aab}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .spacer{flex:1}
+  button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 11px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:16px 24px;max-width:1500px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card h2{font-size:14px;margin:0 0 8px;color:var(--sub);font-weight:600;display:flex;align-items:center;gap:8px}
+  .big{display:flex;align-items:baseline;gap:8px}
+  .big .n{font-size:88px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .big .u{font-size:22px;color:var(--sub)}
+  .sub2{color:var(--sub);font-size:13px;margin-top:6px}
+  .zoneN{margin-top:10px;padding:8px 10px;border-radius:8px;background:#eaf6ef;font-size:14px}
+  .zoneN b{font-size:22px;color:var(--ok)}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:#f3f5f9;border-radius:8px;padding:7px 10px}
+  .stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--sub)}
+  .col{display:flex;flex-direction:column;gap:16px;min-width:0}
+  canvas{width:100%;display:block}
+  .opts{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .opts button{font-size:12px;padding:3px 9px}
+  .legend{font-size:12px;color:var(--sub);display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;font-variant-numeric:tabular-nums}
+  th{color:var(--sub);font-weight:600;font-size:12px}
+  .scroll{max-height:230px;overflow:auto}
+  pre{margin:0;font:12px/1.5 Consolas,monospace;white-space:pre-wrap;max-height:200px;overflow:auto;background:#10151f;color:#cfe3ff;border-radius:8px;padding:10px}
+  pre .sys{color:#ffd479} pre .cnt{color:#7ef0a8}
+  .note{font-size:13px;color:var(--sub);background:#fff8e6;border:1px solid #f1e0b0;border-radius:8px;padding:10px 12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .seg{display:flex;gap:0;margin-bottom:10px}
+  .seg button{border-radius:0;flex:1;font-size:13px}
+  .seg button:first-child{border-radius:8px 0 0 8px} .seg button:last-child{border-radius:0 8px 8px 0}
+  .calib{background:#f3f5f9;border-radius:8px;padding:8px;margin-bottom:8px}
+  .calib button{font-size:13px}
+  .sl{margin:6px 0}
+  .sl label{display:flex;justify-content:space-between;font-size:12px;color:var(--sub)}
+  .sl input{width:100%}
+  @media (max-width:1000px){main,.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>도와드림 레이더 인원 모니터</h1>
+  <span class="pill"><span id="connDot" class="dot"></span><span id="connTxt">연결 확인 중</span></span>
+  <span class="pill"><span id="linkDot" class="dot"></span><span id="linkTxt">센서 신호 대기</span></span>
+  <span class="pill" id="modePill">모드 확인 중</span>
+  <span class="spacer"></span>
+  <button id="resetBtn" title="보드를 재시작해서 센서 설정을 다시 보냅니다">보드 재시작</button>
+  <button id="clearBtn">기록 지우기</button>
+</header>
+
+<main>
+  <div class="col">
+    <section class="card" id="countCard">
+      <h2>지금 감지된 사람</h2>
+      <div class="big"><span class="n" id="count">–</span><span class="u">명</span></div>
+      <div class="sub2" id="since">데이터 기다리는 중</div>
+      <div class="zoneN" id="zoneBox">대기 구역 안: <b id="zoneCount">–</b>명</div>
+    </section>
+
+    <section class="card">
+      <h2>데이터 정제</h2>
+      <div class="seg" id="srcSeg"><button data-s="refine" class="on">정제한 결과</button><button data-s="sensor">센서 원래 추적</button></div>
+      <div class="calib">
+        <button id="calibBtn">빈 공간 보정 (10초)</button>
+        <button id="calibClear">보정 지우기</button>
+        <div class="sub2" id="calibTxt">보정 안 됨: 사람이 없는 상태에서 [빈 공간 보정]을 누르세요.</div>
+      </div>
+      <div class="sl"><label>묶음 거리 <b id="vEps"></b></label><input type="range" id="pEps" min="0.15" max="0.8" step="0.05"></div>
+      <div class="sl"><label>사람으로 볼 최소 점 수 (1초 동안) <b id="vMin"></b></label><input type="range" id="pMin" min="2" max="20" step="1"></div>
+      <div class="sl"><label>사람으로 확정까지 <b id="vConf"></b></label><input type="range" id="pConf" min="0.2" max="3" step="0.1"></div>
+      <div class="sl"><label>안 잡혀도 유지하는 시간 <b id="vHold"></b></label><input type="range" id="pHold" min="1" max="15" step="0.5"></div>
+      <div class="sl"><label>최대 거리 <b id="vRange"></b></label><input type="range" id="pRange" min="1.5" max="6" step="0.25"></div>
+      <div class="sl"><label>위치 부드럽게 <b id="vSmooth"></b></label><input type="range" id="pSmooth" min="0" max="0.9" step="0.05"></div>
+    </section>
+
+    <section class="card">
+      <h2>사람 목록</h2>
+      <table><thead><tr><th>번호</th><th>좌우</th><th>앞</th><th>속도</th><th>머문 시간</th></tr></thead>
+      <tbody id="ppl"><tr><td colspan="5" style="color:var(--sub)">없음</td></tr></tbody></table>
+    </section>
+
+    <section class="card">
+      <h2>통신 상태</h2>
+      <div class="stats">
+        <div class="stat"><b id="sFps">–</b><span>초당 프레임</span></div>
+        <div class="stat"><b id="sBytes">–</b><span>3초간 센서 바이트</span></div>
+        <div class="stat"><b id="sPts">–</b><span>점 구름 점 수</span></div>
+        <div class="stat"><b id="sBad">–</b><span>3초간 버린 프레임</span></div>
+        <div class="stat"><b id="sMax">–</b><span>오늘 최대 인원</span></div>
+        <div class="stat"><b id="sAvg">–</b><span>최근 1분 평균</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card">
+      <h2>위에서 내려다본 모습 (센서 = 아래 가운데)
+        <span class="opts">
+          <button id="oPts" class="on">점 구름</button>
+          <button id="oTrail" class="on">이동 자취</button>
+          <button id="oZone" class="on">대기 구역</button>
+          <button id="oFlipX">좌우 뒤집기</button>
+          <button id="oFlipY">앞뒤 뒤집기</button>
+          <button id="oAxis" title="센서가 앞 거리를 Y와 Z 중 어디에 주는지">앞 거리 축: 자동</button>
+        </span>
+      </h2>
+      <canvas id="map"></canvas>
+      <div class="legend">
+        <span><span class="sw" style="background:#2f6fde"></span>사람 (정제 결과)</span><span><span class="sw" style="border:2px dashed #555;background:none"></span>센서 원래 추적</span><span><span class="sw" style="background:rgba(214,69,69,.25);border-radius:2px"></span>보정으로 지운 곳</span>
+        <span><span class="sw" style="background:#9aa3b5"></span>점 구름 (반사된 점, 0.6초 동안 표시)</span>
+        <span><span class="sw" style="background:rgba(31,157,85,.25)"></span>대기 구역 X −2~2m, Y 0.8~3m</span>
+        <span>격자 1m</span>
+      </div>
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <h2>인원 변화 그래프 <span class="opts" id="rangeTabs"><button data-r="60">1분</button><button data-r="300" class="on">5분</button><button data-r="1800">30분</button></span></h2>
+        <canvas id="chart" height="200"></canvas>
+        <div class="legend"><span style="color:#2f6fde">━ 감지 인원</span><span style="color:#1f9d55">━ 대기 구역 안</span></div>
+      </section>
+      <section class="card">
+        <h2>인원 변화 기록</h2>
+        <div class="scroll"><table>
+          <thead><tr><th>시각</th><th>변화</th><th>인원</th><th>머문 시간</th></tr></thead>
+          <tbody id="events"><tr><td colspan="4" style="color:var(--sub)">아직 변화가 없습니다</td></tr></tbody>
+        </table></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>ESP32 시리얼 원문 (점·사람 줄은 생략)</h2>
+      <pre id="raw"></pre>
+    </section>
+    <div class="note" id="note">좌표는 센서 기준입니다: X = 좌우, Y = 센서 앞으로 떨어진 거리(m). 화면의 방향이 실제와 반대면 [좌우 뒤집기]/[앞뒤 뒤집기]를 누르세요.
+      인원수만 주는 펌웨어(123.ino)가 올라가 있으면 지도는 비어 있고 숫자만 표시됩니다.</div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const ZONE = {x0:-2, x1:2, y0:0.8, y1:3};
+const COLORS = ['#2f6fde','#e0533d','#1f9d55','#9b51e0','#d98a00','#0ea5b7','#d6457f','#5b6b8c'];
+let since = 0, lastOk = 0, range = 300;
+let mode = null;                          // 'pos' | 'count'
+let opt = {pts:true, trail:true, zone:true, flipX:false, flipY:false, fwd:'auto'};
+let axisVotes = {y:0, z:0};
+function fwdAxis(){ return opt.fwd!=='auto' ? opt.fwd : (axisVotes.z > axisVotes.y ? 'z' : 'y'); }
+function autoAxis(y,z){ if (Math.abs(z) > Math.abs(y)) axisVotes.z++; else axisVotes.y++; }
+function toView(x,y,z){ return [x/1000, (fwdAxis()==='z' ? z : y)/1000]; }
+let framePts = [], frameT = [];           // 수신 중인 프레임
+let people = [];                          // 현재 사람 [{id,x,y,z,vx,vy}]
+let ptsHist = [];                         // {t, pts:[[x,y]]}
+const trails = new Map();                 // id -> [{t,x,y}]
+let count = null, countAt = null, zoneCount = null;
+const counts = [], events = [];
+let maxN = null, lastFrameAt = 0, frameTimes = [], lastStatAt = 0;
+
+const fmt = t => new Date(t).toLocaleTimeString('ko-KR', {hour12:false});
+const dur = ms => { const s=Math.round(ms/1000); return s<60? s+'초' : Math.floor(s/60)+'분 '+(s%60)+'초'; };
+const colorOf = id => COLORS[Math.abs(+id) % COLORS.length];
+const inZone = p => p.x>=ZONE.x0 && p.x<=ZONE.x1 && p.y>=ZONE.y0 && p.y<=ZONE.y1;
+
+function logRaw(o, cls){
+  const raw = $('raw'), s = document.createElement('span');
+  if (cls) s.className = cls;
+  s.textContent = fmt(o.t) + '  ' + o.line + '\n';
+  raw.appendChild(s);
+  while (raw.childNodes.length > 300) raw.removeChild(raw.firstChild);
+  raw.scrollTop = raw.scrollHeight;
+}
+
+function onLine(o){
+  const L = o.line; let m;
+  if (o.kind === 'sys') return logRaw(o, 'sys');
+  if (L.startsWith('P,')) { const a=L.split(',').map(Number); framePts.push(toView(a[1],a[2],a[3])); return; }
+  if (L.startsWith('T,')) { const a=L.split(',').map(Number);
+    const [vx0,vy0]=toView(a[2],a[3],a[4]); autoAxis(a[3],a[4]); frameT.push({id:a[1], x:vx0, y:vy0, rx:a[2]/1000, ry:a[3]/1000, rz:a[4]/1000, vx:(a[5]||0)/1000, vy:(fwdAxis()==='z'?0:(a[6]||0)/1000)}); return; }
+  if (L.startsWith('F,')) { setMode('pos'); endFrame(o.t); framePts=[]; frameT=[]; return; }
+  if (L.startsWith('S,')) { const a=L.split(',').map(Number); lastStatAt=o.t;
+    $('sBytes').textContent=a[1]; $('sBad').textContent=a[3]; logRaw(o); return; }
+  if ((m = L.match(/레이더 인원:\s*(\d+)\s*명/))) { setMode('count'); lastFrameAt=o.t; setCount(+m[1], null, o.t); return logRaw(o,'cnt'); }
+  if (/수신\s*\d+\s*바이트/.test(L)) { setMode('count'); lastStatAt=o.t; const b=L.match(/수신\s*(\d+)/); $('sBytes').textContent=b[1]; }
+  logRaw(o);
+}
+
+function setMode(m){
+  if (mode === m) return; mode = m;
+  $('modePill').textContent = m==='pos' ? '위치 모드 (사람 좌표)' : '인원수 모드 (좌표 없음)';
+  $('zoneBox').style.display = m==='pos' ? '' : 'none';
+}
+
+function endFrame(t){
+  lastFrameAt = t; frameTimes.push(t); while (frameTimes.length && t - frameTimes[0] > 3000) frameTimes.shift();
+  sensorTracks = frameT;
+  const ref = refine(t, framePts);
+  people = src === 'refine' ? ref : frameT;
+  ptsHist.push({t, pts:framePts}); while (ptsHist.length && t - ptsHist[0].t > 600) ptsHist.shift();
+  $('sPts').textContent = framePts.length;
+  for (const p of people){ const key=src+p.id; let tr = trails.get(key); if(!tr) trails.set(key, tr=[]); tr.push({t,x:p.x,y:p.y}); }
+  for (const [id,tr] of trails){ while (tr.length && t - tr[0].t > 4000) tr.shift(); if(!tr.length) trails.delete(id); }
+  setCount(people.length, people.filter(inZone).length, t);
+  renderList();
+}
+
+function setCount(n, z, t){
+  const prev = count;
+  if (prev !== null && prev !== n) {
+    events.unshift({t, from:prev, to:n, stay: countAt ? t-countAt : null}); renderEvents();
+  }
+  if (prev !== n) { countAt = t; const c=$('countCard'); c.animate([{background:'#e5efff'},{background:'#fff'}],{duration:700}); }
+  count = n; zoneCount = z;
+  const last = counts[counts.length-1];
+  if (!last || last.n !== n || last.z !== z || t - last.t > 1000) counts.push({t, n, z});
+  maxN = maxN===null ? n : Math.max(maxN, n);
+  $('count').textContent = n; $('zoneCount').textContent = z ?? '–';
+}
+
+function renderList(){
+  $('ppl').innerHTML = people.length ? people.map(p => {
+    const v = Math.hypot(p.vx, p.vy);
+    return `<tr><td><span class="sw" style="background:${colorOf(p.id)}"></span>#${p.id}</td><td>${p.x.toFixed(2)}m</td><td>${p.y.toFixed(2)}m</td><td>${v<0.15?'멈춤':v.toFixed(1)+'m/s'}</td><td>${p.since?dur(Date.now()-p.since):'–'}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" style="color:var(--sub)">없음</td></tr>';
+}
+
+function renderEvents(){
+  $('events').innerHTML = events.slice(0,200).map(e => { const d=e.to-e.from;
+    return `<tr><td>${fmt(e.t)}</td><td style="color:${d>0?'#1f9d55':'#d64545'};font-weight:700">${d>0?'+':''}${d}명</td><td>${e.from} → ${e.to}명</td><td>${e.stay!=null?dur(e.stay):'–'}</td></tr>`; }).join('');
+}
+
+// ---------- 데이터 정제 ----------
+const P = Object.assign({eps:0.4, min:5, conf:0.8, hold:5, range:4, smooth:0.6, win:1000},
+  JSON.parse(localStorage.getItem('radarParams')||'{}'));
+let src = 'refine';
+let sensorTracks = [], refined = [], winPts = [], nextId = 1;
+const CELL = 0.2;
+let bg = new Set(JSON.parse(localStorage.getItem('radarBg')||'[]'));
+let calib = null;   // {until, frames, hits:Map}
+const cellKey = (x,y) => Math.floor(x/CELL)+','+Math.floor(y/CELL);
+
+function dbscan(pts, eps, minPts){
+  const n = pts.length, lab = new Array(n).fill(-1), e2 = eps*eps; let c = 0;
+  const nb = i => { const r=[]; for(let j=0;j<n;j++){ const dx=pts[i][0]-pts[j][0], dy=pts[i][1]-pts[j][1]; if(dx*dx+dy*dy<=e2) r.push(j);} return r; };
+  for (let i=0;i<n;i++){
+    if (lab[i]!==-1) continue;
+    const N = nb(i); if (N.length < minPts){ lab[i] = -2; continue; }
+    lab[i] = c; const q = [...N];
+    while (q.length){ const j = q.pop(); if (lab[j]===-2) lab[j]=c; if (lab[j]!==-1) continue;
+      lab[j]=c; const N2 = nb(j); if (N2.length>=minPts) q.push(...N2); }
+    c++;
+  }
+  const out = [];
+  for (let k=0;k<c;k++){ const m = pts.filter((_,i)=>lab[i]===k);
+    const med = a => { const s=[...a].sort((p,q)=>p-q); return s[s.length>>1]; };
+    out.push({x:med(m.map(p=>p[0])), y:med(m.map(p=>p[1])), n:m.length}); }
+  return out;
+}
+
+function refine(t, pts){
+  // 0) 보정 중이면 점 기록
+  if (calib){ calib.frames++; const seen = new Set(pts.map(p=>cellKey(p[0],p[1])));
+    for (const k of seen) calib.hits.set(k,(calib.hits.get(k)||0)+1);
+    if (t >= calib.until) finishCalib(); }
+  // 1) 거리·보정 영역 거르기
+  const keep = pts.filter(p => p[1] > 0.3 && Math.hypot(p[0],p[1]) <= P.range && !bg.has(cellKey(p[0],p[1])));
+  // 2) 1초 동안 점 모으기
+  for (const p of keep) winPts.push({t, p});
+  while (winPts.length && t - winPts[0].t > P.win) winPts.shift();
+  // 3) 묶기
+  const clusters = dbscan(winPts.map(w=>w.p), P.eps, P.min);
+  // 4) 사람 잇기 (가까운 것부터)
+  const pairs = [];
+  refined.forEach((tr,i)=>clusters.forEach((c,j)=>{ const d=Math.hypot(tr.x-c.x,tr.y-c.y); if(d<Math.max(0.8,P.eps*2)) pairs.push([d,i,j]); }));
+  pairs.sort((a,b)=>a[0]-b[0]);
+  const ut = new Set(), uc = new Set();
+  for (const [d,i,j] of pairs){ if (ut.has(i)||uc.has(j)) continue; ut.add(i); uc.add(j);
+    const tr = refined[i], c = clusters[j], a = 1-P.smooth, dt = Math.max(0.05,(t-tr.last)/1000);
+    const nx = tr.x + a*(c.x-tr.x), ny = tr.y + a*(c.y-tr.y);
+    tr.vx = 0.7*tr.vx + 0.3*(nx-tr.x)/dt; tr.vy = 0.7*tr.vy + 0.3*(ny-tr.y)/dt;
+    tr.x = nx; tr.y = ny; tr.last = t; tr.seen += dt; }
+  clusters.forEach((c,j)=>{ if(!uc.has(j)) refined.push({id:nextId++, x:c.x, y:c.y, vx:0, vy:0, born:t, last:t, seen:0, ok:false}); });
+  // 5) 확정 / 삭제 / 겹친 것 합치기
+  for (const tr of refined){ if (!tr.ok && tr.seen >= P.conf) { tr.ok = true; tr.okAt = t; } }
+  refined = refined.filter(tr => (t - tr.last) <= (tr.ok ? P.hold*1000 : 400));
+  refined.sort((a,b)=>a.born-b.born);
+  refined = refined.filter((tr,i)=>!refined.slice(0,i).some(o=>Math.hypot(o.x-tr.x,o.y-tr.y)<P.eps*0.8));
+  return refined.filter(tr=>tr.ok).map(tr=>({id:tr.id, x:tr.x, y:tr.y, vx:tr.vx, vy:tr.vy, since:tr.okAt, lost:(t-tr.last)>300}));
+}
+
+function startCalib(){ calib = {until: Date.now()+10000, frames:0, hits:new Map()}; }
+function finishCalib(){
+  const th = Math.max(2, calib.frames*0.08); const s = new Set();
+  for (const [k,v] of calib.hits) if (v >= th){ const [i,j]=k.split(',').map(Number);
+    for (let a=-1;a<=1;a++) for (let b=-1;b<=1;b++) s.add((i+a)+','+(j+b)); }
+  bg = s; localStorage.setItem('radarBg', JSON.stringify([...bg])); calib = null;
+  refined = []; winPts = [];
+}
+function paramsUI(){
+  const def = [['pEps','eps',v=>v.toFixed(2)+'m'],['pMin','min',v=>v+'개'],['pConf','conf',v=>v.toFixed(1)+'초'],
+               ['pHold','hold',v=>v.toFixed(1)+'초'],['pRange','range',v=>v.toFixed(2)+'m'],['pSmooth','smooth',v=>Math.round(v*100)+'%']];
+  for (const [id,k,f] of def){ const el=$(id), lab=$('v'+id.slice(1));
+    el.value = P[k]; lab.textContent = f(P[k]);
+    el.oninput = () => { P[k] = +el.value; lab.textContent = f(P[k]); localStorage.setItem('radarParams', JSON.stringify(P)); }; }
+  $('srcSeg').onclick = e => { if(!e.target.dataset.s) return; src = e.target.dataset.s;
+    [...e.currentTarget.children].forEach(b=>b.classList.toggle('on',b===e.target)); };
+  $('calibBtn').onclick = startCalib;
+  $('calibClear').onclick = () => { bg = new Set(); localStorage.removeItem('radarBg'); };
+  setInterval(()=>{ $('calibTxt').textContent = calib ? `보정 중… ${Math.ceil((calib.until-Date.now())/1000)}초 남음 (센서 앞에서 비켜 주세요)`
+     : bg.size ? `보정됨: 사람이 없을 때 잡히던 곳 ${bg.size}칸(20cm)을 지웁니다.` : '보정 안 됨: 사람이 없는 상태에서 [빈 공간 보정]을 누르세요.'; }, 300);
+}
+
+// ---------- 지도 ----------
+const VIEW = {x0:-4, x1:4, y0:-0.3, y1:6};
+function drawMap(){
+  const cv = $('map'), dpr = devicePixelRatio||1, W = cv.clientWidth;
+  const H = Math.min(620, Math.round(W * (VIEW.y1-VIEW.y0)/(VIEW.x1-VIEW.x0)));
+  cv.style.height = H+'px'; cv.width = W*dpr; cv.height = H*dpr;
+  const g = cv.getContext('2d'); g.scale(dpr,dpr);
+  const s = Math.min(W/(VIEW.x1-VIEW.x0), H/(VIEW.y1-VIEW.y0));
+  const ox = W/2, oy = H - (0-VIEW.y0)*s;
+  const X = x => ox + (opt.flipX?-x:x)*s, Y = y => oy - (opt.flipY?-y:y)*s;
+  g.fillStyle = '#fbfcfe'; g.fillRect(0,0,W,H);
+  // 감지 부채꼴
+  g.fillStyle = 'rgba(47,111,222,.05)'; g.beginPath(); g.moveTo(ox,oy); g.arc(ox,oy,6*s,-Math.PI/2-Math.PI/3,-Math.PI/2+Math.PI/3); g.closePath(); g.fill();
+  // 격자
+  g.strokeStyle='#e7eaf0'; g.lineWidth=1; g.font='11px system-ui'; g.fillStyle='#8a93a5';
+  for (let x=Math.ceil(VIEW.x0); x<=VIEW.x1; x++){ g.beginPath(); g.moveTo(X(x),0); g.lineTo(X(x),H); g.stroke(); if(x) g.fillText(x+'m', X(x)+3, H-4); }
+  for (let y=0; y<=VIEW.y1; y++){ g.beginPath(); g.moveTo(0,Y(y)); g.lineTo(W,Y(y)); g.stroke(); if(y) g.fillText(y+'m', ox+4, Y(y)-3); }
+  // 대기 구역
+  if (opt.zone && mode==='pos'){
+    const xa=X(ZONE.x0), xb=X(ZONE.x1), ya=Y(ZONE.y0), yb=Y(ZONE.y1);
+    g.fillStyle='rgba(31,157,85,.10)'; g.strokeStyle='rgba(31,157,85,.6)'; g.setLineDash([6,4]);
+    g.fillRect(Math.min(xa,xb),Math.min(ya,yb),Math.abs(xb-xa),Math.abs(yb-ya));
+    g.strokeRect(Math.min(xa,xb),Math.min(ya,yb),Math.abs(xb-xa),Math.abs(yb-ya)); g.setLineDash([]);
+    g.fillStyle='#1f9d55'; g.font='12px system-ui'; g.fillText('대기 구역', Math.min(xa,xb)+6, Math.min(ya,yb)+16);
+  }
+  // 센서
+  g.fillStyle='#1c2230'; g.fillRect(ox-14, oy-5, 28, 10); g.font='12px system-ui'; g.fillText('센서', ox+18, oy+4);
+  const now = Date.now();
+  // 보정으로 지운 칸
+  g.fillStyle = 'rgba(214,69,69,.12)';
+  for (const k of bg){ const [i,j]=k.split(',').map(Number); const xa=X(i*CELL), xb=X((i+1)*CELL), ya=Y(j*CELL), yb=Y((j+1)*CELL);
+    g.fillRect(Math.min(xa,xb),Math.min(ya,yb),Math.abs(xb-xa),Math.abs(yb-ya)); }
+  // 점 구름
+  if (opt.pts) for (const f of ptsHist){ const a = Math.max(0, 1-(now-f.t)/800);
+    g.fillStyle = `rgba(110,120,140,${0.15+0.6*a})`;
+    for (const [x,y] of f.pts){ g.beginPath(); g.arc(X(x),Y(y),2.5,0,7); g.fill(); } }
+  const stale = now - lastFrameAt > 2000;
+  // 자취
+  if (opt.trail && !stale) for (const [id,tr] of trails){ if (tr.length<2) continue;
+    g.strokeStyle = colorOf(id); g.globalAlpha=.45; g.lineWidth=3; g.beginPath();
+    tr.forEach((p,i)=> i?g.lineTo(X(p.x),Y(p.y)):g.moveTo(X(p.x),Y(p.y))); g.stroke(); g.globalAlpha=1; }
+  // 사람
+  if (!stale) for (const p of people){
+    const cx=X(p.x), cy=Y(p.y), c=colorOf(p.id), r=Math.max(12, 0.25*s);
+    g.globalAlpha = p.lost ? 0.45 : 1;
+    g.fillStyle = c+'33'; g.beginPath(); g.arc(cx,cy,r*1.7,0,7); g.fill();
+    g.fillStyle = c; g.beginPath(); g.arc(cx,cy,r,0,7); g.fill();
+    const v = Math.hypot(p.vx,p.vy);
+    if (v > 0.15){ g.strokeStyle=c; g.lineWidth=2.5; g.beginPath(); g.moveTo(cx,cy);
+      g.lineTo(X(p.x+p.vx*0.8), Y(p.y+p.vy*0.8)); g.stroke(); }
+    g.fillStyle='#fff'; g.font='bold 12px system-ui'; g.textAlign='center'; g.fillText('#'+p.id, cx, cy+4); g.textAlign='left'; g.globalAlpha = 1;
+  }
+  // 센서 원래 추적 (점선 원)
+  if (!stale && src==='refine') for (const p of sensorTracks){ g.strokeStyle='#555'; g.setLineDash([4,3]); g.lineWidth=2;
+    g.beginPath(); g.arc(X(p.x),Y(p.y),14,0,7); g.stroke(); g.setLineDash([]); }
+  // 안내
+  g.font='14px system-ui'; g.fillStyle='#5d6678';
+  if (mode==='count') g.fillText('지금 펌웨어는 인원수만 보냅니다. 위치를 보려면 radar_position 펌웨어를 올려야 합니다.', 12, 22);
+  else if (mode===null) g.fillText('센서 데이터를 기다리는 중…', 12, 22);
+  else if (stale) g.fillText('최근 2초간 프레임이 없습니다', 12, 22);
+  else if (!people.length) g.fillText('사람 없음', 12, 22);
+}
+
+// ---------- 그래프 ----------
+function drawChart(){
+  const cv=$('chart'), dpr=devicePixelRatio||1, W=cv.clientWidth, H=200;
+  cv.width=W*dpr; cv.height=H*dpr; const g=cv.getContext('2d'); g.scale(dpr,dpr);
+  const now=Date.now(), t0=now-range*1000, L=34,R=8,T=8,B=22, w=W-L-R, h=H-T-B;
+  const maxY=Math.max(4,(maxN||0)+1), x=t=>L+(t-t0)/(range*1000)*w, y=n=>T+h-n/maxY*h;
+  g.font='11px system-ui'; g.fillStyle='#5d6678'; g.strokeStyle='#e3e6ec';
+  for(let n=0;n<=maxY;n++){g.beginPath();g.moveTo(L,y(n));g.lineTo(L+w,y(n));g.stroke();g.fillText(n+'명',2,y(n)+4);}
+  const step=range<=60?10:range<=300?60:300;
+  for(let t=Math.ceil(t0/1000/step)*step*1000;t<=now;t+=step*1000)
+    g.fillText(new Date(t).toLocaleTimeString('ko-KR',{hour12:false,hour:'2-digit',minute:'2-digit',second:range<=60?'2-digit':undefined}),x(t)-18,H-5);
+  const line=(key,color)=>{ let cur=null, started=false; g.strokeStyle=color; g.lineWidth=2.5; g.beginPath();
+    for(const c of counts){ const v=c[key]; if(v==null) continue;
+      if(c.t<t0){cur=v;continue;}
+      if(!started){ g.moveTo(cur!=null?L:x(c.t), y(cur!=null?cur:v)); started=true; }
+      if(cur!=null) g.lineTo(x(c.t),y(cur)); g.lineTo(x(c.t),y(v)); cur=v; }
+    if(cur!=null){ if(!started) g.moveTo(L,y(cur)); g.lineTo(L+w,y(cur)); } g.stroke(); };
+  line('n','#2f6fde'); if(mode==='pos') line('z','#1f9d55');
+}
+
+function avgLastMinute(now){
+  const from=now-60000; let area=0, t=from, v=null, start=null;
+  for(const c of counts){ if(c.t<=from){v=c.n;continue;} if(v!==null){area+=v*(c.t-t); if(start===null)start=t;} else start=c.t; t=c.t; v=c.n; }
+  if(v===null) return null; if(start===null) start=t; area+=v*(now-t); return now>start?area/(now-start):v;
+}
+
+function tick(){
+  const now=Date.now();
+  if (count!==null) $('since').textContent = `${fmt(countAt)}부터 ${count}명 (${dur(now-countAt)})`;
+  $('sFps').textContent = mode==='pos' ? (frameTimes.length/3).toFixed(1) : '–';
+  $('sMax').textContent = maxN===null?'–':maxN+'명';
+  const a=avgLastMinute(now); $('sAvg').textContent = a===null?'–':a.toFixed(1)+'명';
+  const online = now-lastOk < 3000;
+  $('connDot').className='dot '+(online&&window._portOk?'ok':'bad');
+  $('connTxt').textContent = !online ? '중계 서버 꺼짐 (start.bat 실행)' : (window._portOk ? window._port+' 연결됨' : window._port+' 열 수 없음 (시리얼 모니터를 닫아 주세요)');
+  const alive = now-Math.max(lastStatAt,lastFrameAt) < 7000;
+  $('linkDot').className='dot '+(alive?'ok':'warn');
+  $('linkTxt').textContent = alive ? 'ESP32 데이터 수신 중' : 'ESP32 데이터 없음';
+}
+
+function frame(){ drawMap(); requestAnimationFrame(frame); }
+async function poll(){
+  try{ const r=await fetch('/data?since='+since,{cache:'no-store'}); const d=await r.json();
+    lastOk=Date.now(); window._port=d.port; window._portOk=d.status==='open';
+    if(d.seq<since) since=0;
+    for(const o of (d.lines||[])){ if(!o.t || o.t < 1e12) o.t = Date.now(); onLine(o); since=Math.max(since,o.seq); }
+  }catch(e){}
+  setTimeout(poll,150);
+}
+
+const tog=(id,key)=>$(id).onclick=e=>{opt[key]=!opt[key]; e.target.classList.toggle('on',opt[key]);};
+$('oAxis').onclick=e=>{ opt.fwd = opt.fwd==='auto'?'y':opt.fwd==='y'?'z':'auto'; };
+setInterval(()=>{ $('oAxis').textContent='앞 거리 축: '+(opt.fwd==='auto'?'자동('+fwdAxis().toUpperCase()+')':opt.fwd.toUpperCase()); },500);
+tog('oPts','pts'); tog('oTrail','trail'); tog('oZone','zone'); tog('oFlipX','flipX'); tog('oFlipY','flipY');
+$('rangeTabs').onclick=e=>{ if(!e.target.dataset.r) return; range=+e.target.dataset.r;
+  [...e.currentTarget.children].forEach(b=>b.classList.toggle('on',b===e.target)); };
+$('resetBtn').onclick=()=>fetch('/reset',{method:'POST'});
+$('clearBtn').onclick=()=>{ counts.length=0; events.length=0; maxN=count; if(count!==null) counts.push({t:Date.now(),n:count,z:zoneCount});
+  $('raw').textContent=''; $('events').innerHTML='<tr><td colspan="4" style="color:var(--sub)">아직 변화가 없습니다</td></tr>'; };
+
+paramsUI(); poll(); setInterval(tick,500); setInterval(drawChart,1000); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

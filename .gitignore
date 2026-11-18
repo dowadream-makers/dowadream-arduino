@@ -1,0 +1,10 @@
+build/
+*.bin
+*.elf
+*.map
+.vscode/
+.DS_Store
+Thumbs.db
+# 시험 기록 (개인 공간 데이터가 들어갈 수 있음)
+captures/
+*.csv
